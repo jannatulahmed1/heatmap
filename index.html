@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jannatul's 2024 Music Plays Heatmap</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: "Arial", sans-serif;
+      background-color: #f4f7fb;
+      color: #4f4f4f;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    h1 {
+      color: #1a202c;
+      font-size: 36px;
+      margin-top: 40px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    p {
+      color: #555;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    .tooltip {
+      position: absolute;
+      background-color: #ffffff;
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 8px;
+      display: none;
+      pointer-events: none;
+      font-size: 12px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    #chart {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      justify-content: center;
+      margin: 40px;
+    }
+    .month-group {
+      background-color: #ffffff;
+      border-radius: 12px;
+      padding: 15px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .month-group:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+    }
+    .month-label {
+      font-weight: bold;
+      font-size: 18px;
+      color: #2d3748;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+    .cell {
+      stroke: #fff;
+      cursor: pointer;
+      transition: fill 0.3s ease;
+    }
+    .date-text {
+      font-size: 10px;
+      text-anchor: middle;
+      fill: #333;
+      font-weight: bold;
+      pointer-events: none;
+    }
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 28px;
+      }
+      #chart {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      }
+    }
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 24px;
+      }
+      #chart {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      }
+      .month-label {
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Jannatul's 2024 Music Plays Heatmap</h1>
+  <div id="chart"></div>
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    const cellSize = 20;
+    const cellMargin = 2;
+    const monthWidth = (cellSize + cellMargin) * 7 + 20;
+    const monthHeight = (cellSize + cellMargin) * 6 + 40;
+
+    const colorScale = d3.scaleLinear()
+      .domain([0, 100]) // Adjust based on your data's play range
+      .range(["#f4f7fb", "#4c51bf"]);
+
+    const parseDate = d3.timeParse("%Y-%m-%d");
+    const formatDate = d3.timeFormat("%Y-%m-%d");
+
+    const tooltip = d3.select("#tooltip");
+
+    d3.json("data.json").then(data => {
+      data.forEach(d => d.date = parseDate(d.date));
+
+      const chart = d3.select("#chart");
+
+      const months = d3.range(12).map(monthIndex => {
+        const startOfMonth = new Date(2024, monthIndex, 1);
+        const daysInMonth = d3.timeDays(
+          startOfMonth,
+          d3.timeMonth.offset(startOfMonth, 1)
+        );
+        return { monthIndex, daysInMonth };
+      });
+
+      months.forEach(({ monthIndex, daysInMonth }) => {
+        const monthGroup = chart.append("div")
+          .attr("class", "month-group");
+
+        monthGroup.append("div")
+          .text(d3.timeFormat("%B")(new Date(2024, monthIndex)))
+          .attr("class", "month-label");
+
+        const svg = monthGroup.append("svg")
+          .attr("width", monthWidth)
+          .attr("height", monthHeight);
+
+        const monthData = daysInMonth.map(day => {
+          const match = data.find(d => formatDate(d.date) === formatDate(day));
+          return { date: day, plays: match ? match.plays : null, mostPlayedSong: match ? match.mostPlayedSong : "No data" };
+        });
+
+        svg.selectAll(".cell")
+          .data(monthData)
+          .enter().append("rect")
+          .attr("class", "cell")
+          .attr("width", cellSize)
+          .attr("height", cellSize)
+          .attr("x", d => d.date.getDay() * (cellSize + cellMargin))
+          .attr("y", d => d3.timeWeek.count(d3.timeMonth(d.date), d.date) * (cellSize + cellMargin))
+          .attr("fill", d => d.plays !== null ? colorScale(d.plays) : "#f9fafb")
+          .attr("rx", 5)
+          .on("mouseover", function (event, d) {
+            tooltip.style("display", "block")
+              .html(`<strong>Date:</strong> ${d3.timeFormat("%B %d, %Y")(d.date)}<br>
+                     <strong>Plays:</strong> ${d.plays !== null ? d.plays : "No data"}<br>
+                     <strong>Top Song:</strong> ${d.mostPlayedSong}`)
+              .style("left", (event.pageX + 10) + "px")
+              .style("top", (event.pageY - 10) + "px");
+          })
+          .on("mouseout", () => tooltip.style("display", "none"));
+
+        svg.selectAll(".date-text")
+          .data(monthData)
+          .enter().append("text")
+          .attr("class", "date-text")
+          .attr("x", d => d.date.getDay() * (cellSize + cellMargin) + cellSize / 2)
+          .attr("y", d => d3.timeWeek.count(d3.timeMonth(d.date), d.date) * (cellSize + cellMargin) + cellSize / 2)
+          .text(d => d3.timeFormat("%d")(d.date));
+      });
+    });
+  </script>
+</body>
+</html>
